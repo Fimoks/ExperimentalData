@@ -1,0 +1,249 @@
+unit Unit1;
+
+interface
+
+uses
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ExtCtrls,
+  IdBaseComponent, IdComponent, IdTCPConnection, IdTCPClient,
+  IdExplicitTLSClientServerBase, IdMessageClient, IdPOP3, IdIOHandler,
+  IdIOHandlerSocket, IdIOHandlerStack, IdSSL, IdSSLOpenSSL, IdSMTPBase, IdSMTP,
+  IdMessage,  IdAttachmentFile, System.IOUtils, System.Generics.Collections,  IdAttachment,
+  Vcl.Imaging.jpeg, Vcl.Imaging.pngimage, IdLogDebug, IdGlobal;
+
+type
+  TForm1 = class(TForm)
+    IdPOP31: TIdPOP3;
+    Timer1: TTimer;
+    IdSSLIOHandlerSocketOpenSSL1: TIdSSLIOHandlerSocketOpenSSL;
+    IdSMTP1: TIdSMTP;
+    ListBox1: TListBox;
+    IdMessage1: TIdMessage;
+    Image1: TImage;
+    Image2: TImage;
+    Image3: TImage;
+    procedure Timer1Timer(Sender: TObject);
+    procedure Image2Click(Sender: TObject);
+
+  private
+    { Private declarations }
+  public
+    { Public declarations }
+  end;
+
+var
+  Form1: TForm1;
+  IdLogDebug1: TIdLogDebug;
+
+implementation
+
+{$R *.dfm}
+
+function ClearMessageAttachments(const AMessage: TIdMessage): Boolean;
+var
+  i: Integer;
+begin
+  Result := True;
+  try
+    for i := AMessage.MessageParts.Count - 1 downto 0 do
+    begin
+      if AMessage.MessageParts.Items[i] is TIdAttachment then
+      begin
+        TIdAttachment(AMessage.MessageParts.Items[i]).Free;
+      end;
+    end;
+  except
+    Result := False;
+  end;
+end;
+
+procedure TForm1.Image2Click(Sender: TObject);
+begin
+   Timer1.Enabled:=True;
+end;
+
+procedure TForm1.Timer1Timer(Sender: TObject);
+var msg1: integer;
+ i,j: Integer;
+IdPOP3: TIdPOP3;
+IdMessage: TIdMessage;
+BodyText: string;
+FileName: string;
+Adress: string;
+FoundFiles: TArray<string>;
+Attachment: TIdAttachment;
+SourceDir, DestDir: string;
+SearchRec: TSearchRec;
+FileList: TArray<string>;
+StartFile, EndFile: string;
+StartIndex, EndIndex: Integer;
+
+begin
+     //try
+     Timer1.Enabled:=False;
+     idPOP31.Username:='kpfukursovaya2@mail.ru';
+     idPOP31.Password:='MP6WPkkG0tzjYr3sUeYp';
+     idPOP31.Host:='pop.mail.ru';
+     IdPOP31.IOHandler:=IdSSLIOHandlerSocketOpenSSL1;
+     IdPOP31.UseTLS:=utUseExplicitTLS;
+     IdSSLIOHandlerSocketOpenSSL1.Destination := IdPOP31.Host+':'+IntToStr(IdPOP31.Port);
+     IdSSLIOHandlerSocketOpenSSL1.Host := IdPOP31.Host;
+     IdSSLIOHandlerSocketOpenSSL1.Port := IdPOP31.Port;
+     IdSSLIOHandlerSocketOpenSSL1.DefaultPort := 0;
+     IdSSLIOHandlerSocketOpenSSL1.SSLOptions.Method := sslvSSLv23;
+     IdSSLIOHandlerSocketOpenSSL1.SSLOptions.Mode := sslmUnassigned;
+     idPOP31.Connect();
+     msg1:= IdPOP31.CheckMessages;
+
+      for j := msg1 downto 1 do
+        begin
+            if not IdPOP31.Connected then    idPOP31.Connect();
+            IdMessage := TIdMessage.Create(nil);
+            IdPOP31.Retrieve(j, IdMessage);
+            BodyText := IdMessage.Subject;  //тема письма
+            BodyText := Trim(BodyText);
+            Adress:= IdMessage.From.Address;
+            IdMessage.Free;
+            IdPOP31.Delete(j);
+            IdPOP31.Disconnect;
+
+
+            if Pos('-', BodyText) > 0 then
+            begin
+            SourceDir := 'C:\Users\danys\OneDrive\Рабочий стол\Рабочий диплом\Данные\Экспериментальные данные';
+            StartFile := Trim(Copy(BodyText, 1, Pos('-', BodyText) - 1)) + '.txt';
+            EndFile := Trim(Copy(BodyText, Pos('-', BodyText) + 1, Length(BodyText))) + '.txt';
+            if FindFirst(SourceDir + '\*', faAnyFile, SearchRec) = 0 then
+              begin
+                repeat
+                  // Добавляем имя файла в массив
+                  SetLength(FileList, Length(FileList) + 1);
+                  FileList[High(FileList)] := SearchRec.Name;
+                until FindNext(SearchRec) <> 0;
+              end;
+            FindClose(SearchRec);
+            // Сортируем массив файлов по названию
+            TArray.Sort<string>(FileList);
+            // Находим индексы начального и конечного файла
+            StartIndex := -1;
+            EndIndex := -1;
+            for i := 0 to High(FileList) do
+              begin
+                if FileList[i] = StartFile then
+                begin
+                  StartIndex := i;
+                end;
+                if FileList[i] = EndFile then
+                begin
+                  EndIndex := i;
+                end;
+              end;
+            IdSMTP1 := TIdSMTP.Create(nil);
+            IdMessage1 := TIdMessage.Create(nil);
+            IdMessage1.From.Address := 'kpfukursovaya2@mail.ru';
+            IdMessage1.Recipients.EMailAddresses := Adress;
+            IdSMTP1.Host := 'smtp.mail.ru';
+            IdSMTP1.Port := 465;
+            IdSMTP1.UserName := 'kpfukursovaya2@mail.ru';
+            IdSMTP1.Password := 'MP6WPkkG0tzjYr3sUeYp';
+            IdSMTP1.AuthType := satDefault;
+            IdSMTP1.ConnectTimeout := 10000;
+            IdSMTP1.IOHandler := IdSSLIOHandlerSocketOpenSSL1;
+            IdSMTP1.UseTLS := utUseExplicitTLS;
+            IdSSLIOHandlerSocketOpenSSL1.Destination := IdSMTP1.Host + ':' + IntToStr(IdSMTP1.Port);
+            IdSSLIOHandlerSocketOpenSSL1.Host := IdSMTP1.Host;
+            IdSSLIOHandlerSocketOpenSSL1.Port := IdSMTP1.Port;
+            IdSSLIOHandlerSocketOpenSSL1.DefaultPort := 0;
+            IdSSLIOHandlerSocketOpenSSL1.SSLOptions.Method := sslvSSLv23;
+            IdSSLIOHandlerSocketOpenSSL1.SSLOptions.Mode := sslmUnassigned;
+            IdSMTP1.Connect;
+
+            for i := StartIndex to EndIndex do
+              begin
+                 FileName := FileList[i];
+                 Attachment := TIdAttachmentFile.Create(IdMessage1.MessageParts, 'C:\Users\danys\OneDrive\Рабочий стол\Рабочий диплом\Данные\Экспериментальные данные\' + Filename);
+                 Attachment.ContentType := 'text/plain'; // тип содержимого файла
+                 Attachment.ContentTransfer := '8bit'; // метод кодирования
+                 IdMessage1.Charset := 'UTF-8';
+                 IdMessage1.Subject := 'Экспериментальные данные лабораторного прибора "Метеорный радар"';
+                 IdMessage1.Body.Text := 'По вашему запросу вам отправлен файл.';
+                 IdSMTP1.Send(IdMessage1);
+
+                 ListBox1.Items.Add('Поступил запрос от: ' + Adress);
+                 ListBox1.Items.Add('Запрашиваемый файл ' + FileName);
+                 ListBox1.Items.Add('Файл успешно отправлен');
+                 ListBox1.Items.Add('Дата и время отправки: '  + DateTimeToStr(Now));
+                 ListBox1.Items.Add(' ');  // для разрыва строки
+
+                 ClearMessageAttachments(IdMessage1);
+              end;
+                 IdMessage1.Free;
+                 IdSMTP1.Disconnect;
+
+            end
+
+
+
+
+
+
+            else
+            begin
+              IdSMTP1 := TIdSMTP.Create(nil);
+              IdMessage1 := TIdMessage.Create(nil);
+
+              IdMessage1.From.Address := 'kpfukursovaya2@mail.ru';
+              IdMessage1.Recipients.EMailAddresses := Adress;
+              IdSMTP1.Host := 'smtp.mail.ru';
+              IdSMTP1.Port := 465;
+              IdSMTP1.UserName := 'kpfukursovaya2@mail.ru';
+              IdSMTP1.Password := 'MP6WPkkG0tzjYr3sUeYp';
+              IdSMTP1.AuthType := satDefault;
+              IdSMTP1.ConnectTimeout := 10000;
+              IdSMTP1.IOHandler := IdSSLIOHandlerSocketOpenSSL1;
+              IdSMTP1.UseTLS := utUseExplicitTLS;
+              IdSSLIOHandlerSocketOpenSSL1.Destination := IdSMTP1.Host + ':' + IntToStr(IdSMTP1.Port);
+              IdSSLIOHandlerSocketOpenSSL1.Host := IdSMTP1.Host;
+              IdSSLIOHandlerSocketOpenSSL1.Port := IdSMTP1.Port;
+              IdSSLIOHandlerSocketOpenSSL1.DefaultPort := 0;
+              IdSSLIOHandlerSocketOpenSSL1.SSLOptions.Method := sslvSSLv23;
+              IdSSLIOHandlerSocketOpenSSL1.SSLOptions.Mode := sslmUnassigned;
+              Attachment := TIdAttachmentFile.Create(IdMessage1.MessageParts, 'C:\Users\danys\OneDrive\Рабочий стол\Рабочий диплом\Данные\Экспериментальные данные\' + Bodytext + '.txt');
+              Attachment.ContentType := 'text/plain'; // тип содержимого файла
+              Attachment.ContentTransfer := '8bit'; // метод кодирования
+              //Attachment.LoadFromFile('C:\' + BodyText);
+              IdMessage1.Charset := 'UTF-8';
+              IdMessage1.Subject := 'Экспериментальные данные лабораторного прибора "Метеорный радар"';
+              IdMessage1.Body.Text := 'По вашему запросу вам отправлен файл.';
+              IdSMTP1.Connect;
+              IdSMTP1.Send(IdMessage1);
+
+              ListBox1.Items.Add('Запрашиваемый файл '+ Bodytext);
+              ListBox1.Items.Add('Файл успешно отправлен');
+              ClearMessageAttachments(IdMessage1);
+              IdSMTP1.Disconnect(False);
+
+              IdMessage1.Free;
+
+
+
+
+
+            end;
+
+          SetLength(FileList, 0);
+          end;
+          IdPOP31.Disconnect;
+     //except
+      //on E: Exception do
+     // begin
+     //
+     // end;
+    // end;
+
+
+
+     Timer1.Enabled:=True;
+end;
+
+end.
